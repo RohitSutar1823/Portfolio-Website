@@ -5,8 +5,38 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js"></script>
 <style>
-/* Layout: a fixed 3D block island sits behind glass panels; the camera flies around it as the page scrolls. Dark first, with a daytime light theme. */
+/* Layout: a fixed 3D block island sits behind glass panels; the camera flies around it as the page scrolls. Light first, with a dark theme toggle. */
 :root {
+  --bg: #dff0fb;
+  --sky-a: #8fd0f5; --sky-b: #e6f5fd;
+  --panel: rgba(255, 255, 255, .55);
+  --panel-solid: rgba(255, 255, 255, .92);
+  --ink: #0b1220;
+  --muted: #475569;
+  --soft: #1e293b;
+  --line: rgba(15, 23, 42, .14);
+  --line-strong: rgba(15, 23, 42, .3);
+  --accent: #0369a1;
+  --accent-ink: #ffffff;
+  --blue: #1d4ed8; --purple: #7e22ce; --pink: #be185d; --green: #15803d; --orange: #c2410c; --amber: #b45309;
+  --shadow: rgba(15, 23, 42, .18);
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #dff0fb; --sky-a: #8fd0f5; --sky-b: #e6f5fd;
+    --panel: rgba(255, 255, 255, .55); --panel-solid: rgba(255, 255, 255, .92);
+    --ink: #0b1220; --muted: #475569; --soft: #1e293b;
+    --line: rgba(15, 23, 42, .14); --line-strong: rgba(15, 23, 42, .3);
+    --accent: #0369a1; --accent-ink: #ffffff;
+    --blue: #1d4ed8; --purple: #7e22ce; --pink: #be185d; --green: #15803d; --orange: #c2410c; --amber: #b45309;
+    --shadow: rgba(15, 23, 42, .18);
+    color-scheme: light;
+  }
+}
+:root[data-theme="dark"] {
   --bg: #0a0f18;
   --sky-a: #0a0f18; --sky-b: #0d1626;
   --panel: rgba(10, 15, 24, .38);
@@ -20,21 +50,7 @@
   --accent-ink: #0a0f18;
   --blue: #60a5fa; --purple: #c084fc; --pink: #f472b6; --green: #4ade80; --orange: #fb923c; --amber: #fbbf24;
   --shadow: rgba(0, 0, 0, .55);
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #dff0fb; --sky-a: #8fd0f5; --sky-b: #e6f5fd;
-    --panel: rgba(255, 255, 255, .55); --panel-solid: rgba(255, 255, 255, .92);
-    --ink: #0b1220; --muted: #475569; --soft: #1e293b;
-    --line: rgba(15, 23, 42, .14); --line-strong: rgba(15, 23, 42, .3);
-    --accent: #0369a1; --accent-ink: #ffffff;
-    --blue: #1d4ed8; --purple: #7e22ce; --pink: #be185d; --green: #15803d; --orange: #c2410c; --amber: #b45309;
-    --shadow: rgba(15, 23, 42, .18);
-    color-scheme: light;
-  }
 }
 :root[data-theme="light"] {
   --bg: #dff0fb; --sky-a: #8fd0f5; --sky-b: #e6f5fd;
@@ -102,9 +118,10 @@ header.nav.scrolled { background: var(--panel-solid); backdrop-filter: blur(16px
 .tool .on-ic { color: var(--accent); }
 #soundBtn .on-ic, #soundBtn[aria-pressed="true"] .off { display: none; }
 #soundBtn[aria-pressed="true"] .on-ic { display: block; animation: pulse 2s ease-in-out infinite; }
-#themeBtn .sun { display: none; }
-:root[data-theme="light"] #themeBtn .sun { display: block; }
-:root[data-theme="light"] #themeBtn .moon { display: none; }
+#themeBtn .sun { display: block; }
+#themeBtn .moon { display: none; }
+:root[data-theme="dark"] #themeBtn .sun { display: none; }
+:root[data-theme="dark"] #themeBtn .moon { display: block; }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) #themeBtn .sun { display: block; }
   :root:not([data-theme="dark"]) #themeBtn .moon { display: none; }
@@ -504,10 +521,9 @@ function ic(id, cls) { return '<svg class="' + (cls || "ic") + '"><use href="#' 
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 function $(id) { return document.getElementById(id); }
 
-/* ---------- Sound: synthesised, only after the viewer switches it on ---------- */
-/* ---------- Sound: synthesised Web Audio API (clean, glitch-free & pleasant) ---------- */
+/* ---------- Sound: synthesised Web Audio API, only after the viewer switches it on ---------- */
 var Sfx = {
-  ctx: null, on: false, amb: null, _lastPling: 0,
+  ctx: null, on: false, _lastPling: 0,
   ensure: function () {
     if (!this.ctx) {
       var C = window.AudioContext || window.webkitAudioContext;
@@ -552,108 +568,52 @@ var Sfx = {
       } catch (e) {}
     });
   },
-  // Soft, satisfying UI tactile click (clean sine tap, zero harsh buzz)
-  click: function () {
-    this.tone(1200, 0.035, "sine", 0.05, 300);
+  melody: function (notes, spacing, dur, type, vol) {
+    var me = this;
+    notes.forEach(function (f, i) {
+      setTimeout(function () {
+        if (me.on) me.tone(f, dur, type, vol);
+      }, i * spacing);
+    });
   },
-  // Playful pop for theme and toggles
+  action: function () {
+    this.melody([523.25, 659.25, 783.99], 42, 0.16, "sine", 0.045);
+  },
+  tech: function () {
+    this.tone(659.25, 0.07, "sine", 0.018, 620);
+  },
   pop: function () {
-    this.tone(360, 0.07, "sine", 0.07, 720);
+    this.melody([392, 493.88, 587.33], 48, 0.2, "sine", 0.05);
   },
-  // Harmonious pentatonic chime on section scroll (throttled against rapid scrolling)
   pling: function (s) {
     var now = Date.now();
-    if (now - this._lastPling < 180) return;
+    if (now - this._lastPling < 220) return;
     this._lastPling = now;
-    var scale = [0, 2, 4, 7, 9, 12, 14, 16]; // Major pentatonic semitones
+    var scale = [0, 2, 4, 7, 9, 12, 14, 16];
     var step = scale[(Math.abs(s) || 0) % scale.length];
     var freq = 440 * Math.pow(2, (step - 9) / 12);
-    this.tone(freq, 0.35, "triangle", 0.06);
+    this.tone(freq, 0.42, "sine", 0.055);
+    this.tone(freq * 2, 0.3, "triangle", 0.018);
   },
-  // Uplifting 4-note celebration chord when sound is turned ON
   levelUp: function () {
-    var notes = [0, 4, 7, 12];
-    var me = this;
-    notes.forEach(function (semi, i) {
-      setTimeout(function () {
-        if (!me.on) return;
-        var f = 523.25 * Math.pow(2, semi / 12);
-        me.tone(f, 0.45, "triangle", 0.08);
-      }, 70 * i);
-    });
-  },
-  // Warm, gentle ambient soundscape with lowpass filter (no harsh electrical drone)
-  startAmbient: function () {
-    var me = this;
-    if (this.amb) return;
-    this.ensure().then(function (c) {
-      if (!c || !me.on || me.amb) return;
-      try {
-        var t = c.currentTime + 0.01;
-        var g = c.createGain();
-        var filter = c.createBiquadFilter();
-        filter.type = "lowpass";
-        filter.frequency.setValueAtTime(360, t); // Warm, soothing filter cutoff
-
-        // Smooth fade-in over 1.5 seconds
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.linearRampToValueAtTime(0.016, t + 1.5);
-
-        filter.connect(g);
-        g.connect(c.destination);
-
-        // Soft, cosmic chord: A2 (110Hz), E3 (164.8Hz), and detuned shimmer A3 (220.5Hz)
-        var oscs = [];
-        var freqs = [110, 164.81, 220.5];
-        freqs.forEach(function (freq) {
-          var o = c.createOscillator();
-          o.type = "sine";
-          o.frequency.setValueAtTime(freq, t);
-          o.connect(filter);
-          o.start(t);
-          oscs.push(o);
-        });
-
-        me.amb = { g: g, filter: filter, nodes: oscs };
-      } catch (e) {}
-    });
-  },
-  // Smooth fade-out before stopping to avoid any abrupt clicks/pops
-  stopAmbient: function () {
-    if (!this.amb) return;
-    var amb = this.amb;
-    this.amb = null;
-    try {
-      if (this.ctx) {
-        var t = this.ctx.currentTime;
-        amb.g.gain.setValueAtTime(amb.g.gain.value, t);
-        amb.g.gain.linearRampToValueAtTime(0.0001, t + 0.35);
-        setTimeout(function () {
-          amb.nodes.forEach(function (n) { try { n.stop(); n.disconnect(); } catch (e) {} });
-          try { amb.filter.disconnect(); amb.g.disconnect(); } catch (e) {}
-        }, 400);
-      }
-    } catch (e) {}
+    this.melody([261.63, 329.63, 392, 523.25, 659.25], 95, 0.5, "sine", 0.055);
+    this.melody([392, 493.88, 659.25], 190, 0.65, "triangle", 0.025);
   },
   set: function (v) {
+    if (this.on === v) return;
     this.on = v;
     if (v) {
-      this.ensure().then(function () {
-        Sfx.startAmbient();
-        Sfx.levelUp();
-      });
-    } else {
-      this.stopAmbient();
+      this.ensure().then(function () { Sfx.levelUp(); });
     }
   }
 };
 
-/* ---------- Theme (system by default, toggle saves a choice) ---------- */
+/* ---------- Theme (light by default, toggle saves a choice) ---------- */
 var Theme = {
   light: function () {
     var t = document.documentElement.getAttribute("data-theme");
     if (t) return t === "light";
-    return window.matchMedia("(prefers-color-scheme: light)").matches;
+    return true;
   },
   apply: function () { if (window.__sceneTheme) window.__sceneTheme(Theme.light()); }
 };
@@ -729,7 +689,7 @@ try { var savedTheme = localStorage.getItem("rs-theme"); if (savedTheme === "lig
   $("copyEmail").addEventListener("click", function () { copy(CONFIG.email, "Email copied"); });
   $("sayHello").addEventListener("click", function () { copy(CONFIG.email, "Email copied: " + CONFIG.email); });
 
-  /* Sound toggle and click sounds */
+  /* Sound toggle and interaction sounds */
   var sbtn = $("soundBtn"), slabel = $("soundLabel");
   sbtn.addEventListener("click", function () {
     var next = !Sfx.on; Sfx.set(next);
@@ -737,8 +697,11 @@ try { var savedTheme = localStorage.getItem("rs-theme"); if (savedTheme === "lig
     slabel.textContent = next ? "AUDIO ON" : "AUDIO OFF";
   });
   document.addEventListener("click", function (e) {
-    var t = e.target.closest ? e.target.closest(".btn, .pill-nav a, .mobile-menu a, .icon-btn, .feat-btn, .tool, .info, .repo, .logo") : null;
-    if (t) Sfx.click();
+    var t = e.target.closest ? e.target.closest("button, a, .sk") : null;
+    if (!t || t === sbtn) return;
+    if (t.classList.contains("sk")) Sfx.tech();
+    else if (t === $("themeBtn")) return;
+    else Sfx.action();
   });
 
   /* Theme toggle */
@@ -767,7 +730,6 @@ try { var savedTheme = localStorage.getItem("rs-theme"); if (savedTheme === "lig
     b.setAttribute("aria-expanded", open ? "false" : "true");
     b.firstElementChild.textContent = open ? "View Key Features" : "Hide Key Features";
     document.getElementById(b.getAttribute("aria-controls")).hidden = open;
-    if (!open) Sfx.pop();
   });
 
   /* Smooth scrolling with Lenis, native smooth scroll as fallback */
